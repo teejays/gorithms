@@ -1,0 +1,76 @@
+Contest / Raffle Feature
+
+You've been asked to implement a new "contests" feature for a successful online retailer. In each of these online contests, users should be able to enter tickets for specific prizes until the contest ends, at which point the prizes are awarded and shipped to the winners.
+
+The existing e-commerce platform already has models and business logic for:
+Users
+Products
+Checkout/shipping
+
+Contest requirements:
+Multiple contests may be active at once
+Contests may have multiple prizes
+Users should be awarded tickets for past purchase history and other site activity
+Users should be able to allocate tickets toward specific prizes in the contest
+Tickets are specific to each contest
+Winners should be chosen randomly from all tickets entered for each prize in a contest
+Each contest may have separate rules indicating how many tickets should be awarded to each user
+
+How might you design this feature?
+
+---------------------------------------------------------------------------------------------------------------------------------------------------
+
+Data models / tables
+
+Contests
+Name
+Description
+Start / End Date
+Metadata (active, deleted, timestamps)
+
+Rules
+Potentially different table
+TODO come back to this later
+
+Contest_Product
+Mapping of contests and product ID
+Foreign keys: contest/product
+Prizes are Products
+Contests have many prizes
+
+How do we relate users to a contest?
+
+Table to store user ID with product
+Many-to-many users <-> products
+
+
+Tickets
+Need to store how many tickets a user has
+Need to store how many tickets a user has entered toward a specific prize
+
+Need to answer how many tickets a user has
+
+Tickets table:
+Ticket ID (PK)
+User ID
+Contest ID
+1 row per ticket
+Rule ID (to store why/how ticket was created)
+
+Spending tickets?
+
+Contest
+ContestProducts - Prizes
+Tickets (Awarded // Credits)
+Entries (Spent // Debits)
+
+Entries:
+User ID
+Prize ID (to ContestProducts table)
+1 row per ticket?
+Add’l column for credit or debit (table as transaction log - value in history)
+
+How to answer how many tickets a user has left?
+Count of tickets - Sum of entries by user/contest
+
+
