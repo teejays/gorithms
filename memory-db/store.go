@@ -7,8 +7,8 @@ import (
 
 // Error variables for various unexpected situations that occur while dealing with Store.
 var (
-	ERR_KEY_NOT_EXIST   error = fmt.Errorf("Key does not exist")
-	ERR_NOT_TRANSACTION error = fmt.Errorf("ERR NOT INSIDE A TRANSACTION")
+	ERR_KEY_NOT_EXIST   error = fmt.Errorf("KEY NOT FOUND")
+	ERR_NOT_TRANSACTION error = fmt.Errorf("TRANSACTION NOT FOUND")
 )
 
 // Store is the main data structure that supports this project. It has three fields:
