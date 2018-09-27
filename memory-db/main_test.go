@@ -6,9 +6,15 @@ import (
 	"testing"
 )
 
+// MemoryDbTest describes a complete test interaction with the DB for testing
 type MemoryDbTest struct {
-	Inputs  []string
-	Outputs []string
+	Inputs  []string // Entered Statements
+	Outputs []string // Expected Outputs for the statements
+}
+
+var Example0 MemoryDbTest = MemoryDbTest{
+	Inputs:  []string{"GET a", "SET a foo", "GET a", "SET a bar", "GET a", "COUNT bar", "COUNT foo", "END"},
+	Outputs: []string{"NULL", "", "foo", "", "bar", "1", "0", ""},
 }
 
 var Example1 MemoryDbTest = MemoryDbTest{
@@ -32,21 +38,47 @@ var Example4 MemoryDbTest = MemoryDbTest{
 }
 
 func init() {
-	EnableTestMode = true
-	clog.LogLevel = 0
+	EnableTestMode = true // Enable this so the program doesn't exit when "END" command is tested.
+	clog.LogLevel = 5
+	InitStore()
 }
 
-func TestInvalidCommand1(t *testing.T) {
-	out, err := handleStatement("BLAH a foo")
+func TestInvalidStatements(t *testing.T) {
+	stmt := "        "
+	_, err := processStatement(stmt)
+	if err != ERR_STMT_EMPTY {
+		t.Errorf("Statement: %s | Expected ERR_INVALID_COMMAND_KEYWORD, but got: %s", stmt, err)
+	}
+
+	stmt = "BLAH a foo"
+	_, err = processStatement(stmt)
 	if err != ERR_INVALID_COMMAND_KEYWORD {
-		t.Errorf("Expected ERR_INVALID_COMMAND_KEYWORD, but got: %s", err)
+		t.Errorf("Statement: %s | Expected ERR_INVALID_COMMAND_KEYWORD, but got: %s", stmt, err)
+	}
+
+	stmt = " a"
+	_, err = processStatement(stmt)
+	if err != ERR_INVALID_COMMAND_KEYWORD {
+		t.Errorf("Statement: %s | Expected ERR_INVALID_COMMAND_KEYWORD, but got: %s", stmt, err)
+	}
+
+	stmt = "GET a a  "
+	_, err = processStatement(stmt)
+	if err != ERR_INVALID_ARGS_NUM {
+		t.Errorf("Statement: %s | Expected ERR_INVALID_COMMAND_KEYWORD, but got: %s", stmt, err)
+	}
+
+	stmt = "SET a foo bar"
+	_, err = processStatement(stmt)
+	if err != ERR_INVALID_ARGS_NUM {
+		t.Errorf("Statement: %s | Expected ERR_INVALID_COMMAND_KEYWORD, but got: %s", stmt, err)
 	}
 }
 
-func TestInvalidNumArgs(t *testing.T) {
-	out, err := handleStatement("SET a foo bar")
-	if err != ERR_INVALID_ARGS_NUM {
-		t.Errorf("Expected ERR_INVALID_ARGS_NUM, but got: %s", err)
+func TestExample0(t *testing.T) {
+	err := exampleTestHelper(Example0)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
@@ -82,10 +114,10 @@ func exampleTestHelper(test MemoryDbTest) error {
 	if len(test.Inputs) != len(test.Outputs) {
 		return fmt.Errorf("Invalid test params: length of inputs does not equal length of outputs")
 	}
-	clog.Debugf("ExampleTest Staring: Count %d \n", len(test.Inputs))
+	clog.Debugf("ExampleTest Staring: Count %d", len(test.Inputs))
 
 	for i := 0; i < len(test.Inputs); i++ {
-		out, err := handleStatement(test.Inputs[i])
+		out, err := processStatement(test.Inputs[i])
 		clog.Infof("Statement #%d: %s | Expected: %s | Got: %s", i, test.Inputs[i], test.Outputs[i], out)
 		if err != nil {
 			return fmt.Errorf("Stmt: '%s' | Error: %s", test.Inputs[i], err)
