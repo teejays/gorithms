@@ -3,157 +3,174 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/teejays/clog"
 	"os"
 	"strings"
 )
 
 const STDIN_PROMPT string = ">> "
-const ERR_KEY_NOT_EXIST error = fmt.Errorf("Key does not exist")
 
-type Store struct {
-	Kv     map[string]string
-	Counts map[string]int
-	Parent *db
-}
+var ERR_INVALID_COMMAND_KEYWORD error = fmt.Errorf("INVALID COMMAND")
+var ERR_INVALID_ARGS_NUM error = fmt.Errorf("INVALID NUMBER OF ARGUMENTS PROVIDED")
+var ERR_STMT_EMPTY error = fmt.Errorf("EMPTY STATEMENT PROVIDED")
 
-func NewStore() *Store {
-	s := new(Store)
-	s.KV = make(map[string]string)
-	s.Counts = make(map[string]int)
-
-	return s
-}
-
-func (s *Store) Set(key, value string) error {
-	if valueOld, exists := s.Kv[key]; exists {
-		s.Counts[valueOld] -= 1
-	}
-
-	s.Kv[key] = value
-	s.Counts[key] += 1
-
-	return nil
-}
-
-func (s *Store) Get(key string) (string, error) {
-	value, exists := s.Kv[key]
-
-	// Base Condition
-	if exists {
-		return value, nil
-	}
-	if s.Parent == nil {
-		return value, ERR_KEY_NOT_EXIST
-	}
-	return s.Parent.Get(key)
-}
-
-func (s *Store) Delete(key string) error {
-	value, exists := s.Kv[key]
-	if !exists {
-		return ERR_KEY_NOT_EXIST
-	}
-	kv.Counts[value] -= 1
-	delete(s.Kv, key)
-}
-
-func (s *Store) Count(key string) (int, error) {
-	return s.Counts[key], nil
-}
+var EnableTestMode bool = false
 
 var primaryStore *Store
+var currentStore *Store
 
 func init() {
-	primaryStore = NewStore()
+	primaryStore = NewStore(nil)
+	currentStore = primaryStore
+}
+
+type ActionHandler struct {
+	Fn      func(...string) (string, error)
+	NumArgs int
+}
+
+var funcMap map[string]ActionHandler = map[string]ActionHandler{
+	"SET":      ActionHandler{handleSet, 2},
+	"GET":      ActionHandler{handleGet, 1},
+	"DELETE":   ActionHandler{handleDelete, 1},
+	"COUNT":    ActionHandler{handleCount, 1},
+	"BEGIN":    ActionHandler{handleBegin, 0},
+	"ROLLBACK": ActionHandler{handleRollback, 0},
+	"COMMIT":   ActionHandler{handleCommit, 0},
+	"END":      ActionHandler{handleEnd, 0},
 }
 
 func main() {
+	clog.LogLevel = 5
 
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print(STDIN_PROMPT)
 
 	for scanner.Scan() {
 		stmt := scanner.Text()
-
-		cmd, args := splitStatement(stmt)
-
-		fn, exists := funcMap[cmd]
-		if !exists {
-			handleErrf("Invalid command: %s", cmd)
+		err := validateStatement(stmt)
+		if err == ERR_STMT_EMPTY {
+			fmt.Print(STDIN_PROMPT)
 			continue
 		}
-
-		fn(args...)
+		if err != nil {
+			fmt.Println(err)
+		}
+		out, err := handleStatement(stmt)
+		if err != nil {
+			fmt.Println(err)
+		}
+		if out != "" {
+			fmt.Println(out)
+		}
+		fmt.Print(STDIN_PROMPT)
 	}
 }
 
-var funcMap map[string]func(...string) = map[string]func(...string){
-	"SET": handleSet,
-	"GET": handleGet,
-}
-
-func handleErrf(msg string, args ...interface{}) {
-	fmt.Printf(msg+"\n", args...)
-	fmt.Print(STDIN_PROMPT)
-}
-func handleReturn(msg string, args ...interface{}) {
-	if msg != "" {
-		fmt.Printf(msg+"\n", args...)
+func handleStatement(stmt string) (string, error) {
+	//clog.Debugf("[handleStatement] Statement: %s", stmt)
+	cmd, args := splitStatement(stmt)
+	h, exists := funcMap[cmd]
+	if !exists {
+		return "", ERR_INVALID_COMMAND_KEYWORD
 	}
-	fmt.Print(STDIN_PROMPT)
-}
 
-func handleSet(args ...string) {
 	// Check the number of args
-	var numArgsExpected int = 2
-	if len(args) != numArgsExpected {
-		handleErrf("Invalid number of arguments provided: expected %d got %d", numArgsExpected, len(args))
+	if len(args) != h.NumArgs {
+		return "", ERR_INVALID_ARGS_NUM
 	}
 
+	out, err := h.Fn(args...)
+	if err != nil {
+		return out, err
+	}
+
+	clog.Debugf("CurrentStore: %v", currentStore)
+	return out, nil
+}
+
+func handleSet(args ...string) (string, error) {
 	key := args[0]
 	value := args[1]
 
-	// get current value
-	if _value, exists := kv[key]; exists {
-		cnts[_value] = cnts[_value] - 1
-	}
-
-	kv[key] = value
-	cnts[key] += 1
-
-	handleReturn("")
+	err := currentStore.Set(key, value)
+	return "", err
 }
 
-func handleGet(args ...string) {
-	// Check the number of args
-	var numArgsExpected int = 1
-	if len(args) != numArgsExpected {
-		handleErrf("Invalid number of arguments provided: expected %d got %d", numArgsExpected, len(args))
-	}
-
+func handleGet(args ...string) (string, error) {
 	key := args[0]
-	value, exists := kv[key]
-	if !exists {
-		handleReturn("NULL")
-	}
 
-	handleReturn(value)
+	val, err := currentStore.Get(key)
+	if err == ERR_KEY_NOT_EXIST || val == "" {
+		return "NULL", nil
+	}
+	return val, err
 }
 
-func handleDelete(args ...string) {
-	// Check the number of args
-	var numArgsExpected int = 1
-	if len(args) != numArgsExpected {
-		handleErrf("Invalid number of arguments provided: expected %d got %d", numArgsExpected, len(args))
-	}
+func handleDelete(args ...string) (string, error) {
 	key := args[0]
 
-	delete(kv, key)
+	err := currentStore.Delete(key)
+	return "", err
+}
+
+func handleCount(args ...string) (string, error) {
+	val := args[0]
+
+	cnt, err := currentStore.Count(val)
+	return fmt.Sprintf("%d", cnt), err
+}
+
+func handleBegin(args ...string) (string, error) {
+	// Whenever a transaction begins, we should create a new empty Store (not a copy)
+	// which can store intermediate states of those things that have changed.
+	trxnStore := NewStore(currentStore)
+	currentStore = trxnStore
+
+	return "", nil
+}
+
+func handleRollback(args ...string) (string, error) {
+	if currentStore.Parent == nil {
+		return "", fmt.Errorf("No transaction to rollback")
+	}
+	currentStore = currentStore.Parent
+	return "", nil
+}
+
+func handleCommit(args ...string) (string, error) {
+	if currentStore.Parent == nil {
+		return "", fmt.Errorf("No transaction to commit")
+	}
+
+	// we need to merge the current store to the primary store
+	for k, v := range currentStore.Kv {
+		primaryStore.Kv[k] = v
+	}
+	for _, v := range primaryStore.Kv {
+		cnt, err := currentStore.Count(v)
+		if err != nil {
+			return "", fmt.Errorf("Error while commiting transaction: %s", err)
+		}
+		primaryStore.CountDiff[v] = cnt
+	}
+	currentStore = currentStore.Parent
+	return "", nil
+}
+
+func handleEnd(args ...string) (string, error) {
+	if !EnableTestMode {
+		os.Exit(0)
+	} else {
+		primaryStore = NewStore(nil)
+		currentStore = primaryStore
+	}
+	return "", nil
 }
 
 func validateStatement(q string) error {
 	if strings.TrimSpace(q) == "" {
-		return fmt.Errorf("Empty statement passed")
+		return ERR_STMT_EMPTY
 	}
 	return nil
 }
